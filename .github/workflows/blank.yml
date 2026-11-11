@@ -27,15 +27,16 @@ jobs:
           mv temp_templates/templates/* ~/.local/share/godot/export_templates/4.2.2.stable/
           unzip -q project.zip -d unpacked_game
           GAME_DIR=$(dirname "$(find unpacked_game -name "project.godot" | head -n 1)")
-          cat "$GAME_DIR/project.godot"
           sed -i 's/openxr\/enabled=true/openxr\/enabled=false/g' "$GAME_DIR/project.godot"
           sed -i '/default_action_map/d' "$GAME_DIR/project.godot"
           keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore "$GAME_DIR/debug.keystore" -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 10000
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "/usr/local/lib/android/sdk"\nexport/android/java_sdk_path = "/usr/lib/jvm/temurin-17-jdk-amd64"\nexport/android/debug_keystore = "%s/%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$PWD" "$GAME_DIR" > ~/.config/godot/editor_settings-4.tres
-          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path="app-vr-debug.apk"\n\n[preset.0.options]\n\ncustom_template/debug="%s/.local/share/godot/export_templates/4.2.2.stable/android_debug.apk"\ncustom_template/release="%s/.local/share/godot/export_templates/4.2.2.stable/android_release.apk"\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=false\narchitectures/arm64-v8a=true\narchitectures/x86=false\narchitectures/x86_64=false\nkeystore/debug="%s/%s/debug.keystore"\nkeystore/debug_user="androiddebugkey"\nkeystore/debug_password="android"\nkeystore/release=""\nkeystore/release_user=""\nkeystore/release_password=""\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.kondrashenko.picovrspace"\npackage/name="PicoVR Space"\npackage/signed=true\nxr_features/xr_mode=0\n' "$HOME" "$HOME" "$PWD" "$GAME_DIR" > "$GAME_DIR/export_presets.cfg"
+          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path="unsigned.apk"\n\n[preset.0.options]\n\ncustom_template/debug="%s/.local/share/godot/export_templates/4.2.2.stable/android_debug.apk"\ncustom_template/release="%s/.local/share/godot/export_templates/4.2.2.stable/android_release.apk"\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=false\narchitectures/arm64-v8a=true\narchitectures/x86=false\narchitectures/x86_64=false\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.kondrashenko.picovrspace"\npackage/name="PicoVR Space"\npackage/signed=false\nxr_features/xr_mode=0\n' "$HOME" "$HOME" > "$GAME_DIR/export_presets.cfg"
           cd "$GAME_DIR"
           godot --headless --import
-          godot --headless --verbose --export-debug "Android" "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk"
+          godot --headless --export-debug "Android" unsigned.apk
+          BUILD_TOOLS=$(ls -d /usr/local/lib/android/sdk/build-tools/* | tail -n 1)
+          "$BUILD_TOOLS/apksigner" sign --ks debug.keystore --ks-pass pass:android --out "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk" unsigned.apk
           test -s "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk"
 
       - uses: actions/upload-artifact@v4
