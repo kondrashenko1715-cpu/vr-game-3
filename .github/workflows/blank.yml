@@ -34,11 +34,14 @@ jobs:
           unzip -q Godot_v4.2.2-stable_export_templates.tpz -d temp_templates
           mv temp_templates/templates/* ~/.local/share/godot/export_templates/4.2.2.stable/
           
-          # Распаковываем ваш загруженный архив и автоматически находим папку с project.godot
+          # Распаковываем архив и находим папку с project.godot
           mkdir -p unpacked_game
           unzip -q project.zip -d unpacked_game
           GAME_DIR=$(dirname "$(find unpacked_game -name "project.godot" | head -n 1)")
-          echo "Найдена папка с игрой: $GAME_DIR"
+          
+          # Отключаем OpenXR в распакованном project.godot, чтобы убрать ошибку profile_def is null
+          sed -i 's/openxr\/enabled=true/openxr\/enabled=false/g' "$GAME_DIR/project.godot"
+          sed -i '/default_action_map/d' "$GAME_DIR/project.godot"
           
           # Генерируем отладочный ключ подписи
           keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore "$GAME_DIR/debug.keystore" -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 10000
@@ -47,10 +50,10 @@ jobs:
           mkdir -p ~/.config/godot
           printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "/usr/local/lib/android/sdk"\nexport/android/java_sdk_path = "/usr/lib/jvm/temurin-17-jdk-amd64"\nexport/android/debug_keystore = "%s/%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$PWD" "$GAME_DIR" > ~/.config/godot/editor_settings-4.tres
 
-          # Создаём пресет экспорта внутри папки с игрой
-          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path="app-vr-debug.apk"\n\n[preset.0.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=false\narchitectures/arm64-v8a=true\narchitectures/x86=false\narchitectures/x86_64=false\nkeystore/debug=""\nkeystore/debug_user=""\nkeystore/debug_password=""\nkeystore/release=""\nkeystore/release_user=""\nkeystore/release_password=""\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.kondrashenko.picovrspace"\npackage/name="PicoVR Space"\npackage/signed=true\nxr_features/xr_mode=0\n' > "$GAME_DIR/export_presets.cfg"
+          # Создаём пресет экспорта с явным указанием скачанных шаблонов
+          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path="app-vr-debug.apk"\n\n[preset.0.options]\n\ncustom_template/debug="%s/.local/share/godot/export_templates/4.2.2.stable/android_debug.apk"\ncustom_template/release="%s/.local/share/godot/export_templates/4.2.2.stable/android_release.apk"\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=false\narchitectures/arm64-v8a=true\narchitectures/x86=false\narchitectures/x86_64=false\nkeystore/debug=""\nkeystore/debug_user=""\nkeystore/debug_password=""\nkeystore/release=""\nkeystore/release_user=""\nkeystore/release_password=""\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.kondrashenko.picovrspace"\npackage/name="PicoVR Space"\npackage/signed=true\nxr_features/xr_mode=0\n' "$HOME" "$HOME" > "$GAME_DIR/export_presets.cfg"
 
-          # Переходим в папку игры, импортируем её родные файлы и собираем APK
+          # Импортируем проект и собираем APK
           cd "$GAME_DIR"
           godot --headless --import
           godot --headless --verbose --export-debug "Android" "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk"
