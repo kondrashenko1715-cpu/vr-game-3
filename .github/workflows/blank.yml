@@ -1,0 +1,63 @@
+name: Build Godot Autonomous VR APK
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Godot 4.2.2
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.2.2
+          use-dotnet: false
+          include-templates: false
+
+      - name: Unpack ZIP and Export Android APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          mkdir -p output_apk
+          mkdir -p ~/.local/share/godot/export_templates/4.2.2.stable
+          
+          # Скачиваем официальные шаблоны Android
+          gh release download 4.2.2-stable --repo godotengine/godot --pattern "Godot_v4.2.2-stable_export_templates.tpz"
+          unzip -q Godot_v4.2.2-stable_export_templates.tpz -d temp_templates
+          mv temp_templates/templates/* ~/.local/share/godot/export_templates/4.2.2.stable/
+          
+          # Распаковываем ваш загруженный архив и автоматически находим папку с project.godot
+          mkdir -p unpacked_game
+          unzip -q project.zip -d unpacked_game
+          GAME_DIR=$(dirname "$(find unpacked_game -name "project.godot" | head -n 1)")
+          echo "Найдена папка с игрой: $GAME_DIR"
+          
+          # Генерируем отладочный ключ подписи
+          keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore "$GAME_DIR/debug.keystore" -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 10000
+          
+          # Настраиваем пути к SDK и ключу
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "/usr/local/lib/android/sdk"\nexport/android/java_sdk_path = "/usr/lib/jvm/temurin-17-jdk-amd64"\nexport/android/debug_keystore = "%s/%s/debug.keystore"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$PWD" "$GAME_DIR" > ~/.config/godot/editor_settings-4.tres
+
+          # Создаём пресет экспорта внутри папки с игрой
+          printf '[preset.0]\n\nname="Android"\nplatform="Android"\nrunnable=true\ndedicated_server=false\ncustom_features=""\nexport_filter="all_resources"\ninclude_filter=""\nexclude_filter=""\nexport_path="app-vr-debug.apk"\n\n[preset.0.options]\n\ncustom_template/debug=""\ncustom_template/release=""\ngradle_build/use_gradle_build=false\ngradle_build/export_format=0\narchitectures/armeabi-v7a=false\narchitectures/arm64-v8a=true\narchitectures/x86=false\narchitectures/x86_64=false\nkeystore/debug=""\nkeystore/debug_user=""\nkeystore/debug_password=""\nkeystore/release=""\nkeystore/release_user=""\nkeystore/release_password=""\nversion/code=1\nversion/name="1.0.0"\npackage/unique_name="com.kondrashenko.picovrspace"\npackage/name="PicoVR Space"\npackage/signed=true\nxr_features/xr_mode=0\n' > "$GAME_DIR/export_presets.cfg"
+
+          # Переходим в папку игры, импортируем её родные файлы и собираем APK
+          cd "$GAME_DIR"
+          godot --headless --import
+          godot --headless --verbose --export-debug "Android" "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk"
+          test -s "$GITHUB_WORKSPACE/output_apk/app-vr-debug.apk"
+
+      - name: Upload VR APK to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-space-vr-apk
+          path: output_apk/app-vr-debug.apk
